@@ -64,7 +64,7 @@ jobs:
           import os
           PROJECT_ROOT = os.path.dirname(os.path.abspath(SPEC))
 
-          # Windows hdc binaries (内置)
+          # Windows hdc binaries (built-in)
           hdc_windows_dir = os.path.join(PROJECT_ROOT, 'hdc', 'windows')
           hdc_binaries = []
           if os.path.exists(os.path.join(hdc_windows_dir, 'hdc.exe')):
