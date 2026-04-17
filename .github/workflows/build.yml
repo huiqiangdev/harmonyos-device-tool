@@ -1,0 +1,155 @@
+name: Build HarmonyOS Device Tool
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install customtkinter pyinstaller
+
+      - name: Build .app
+        run: |
+          pyinstaller pyinstaller.spec --clean --noconfirm
+
+      - name: Create dmg
+        run: |
+          mkdir -p dmg_temp
+          cp -R "dist/HarmonyOS Device Tool.app" dmg_temp/
+          ln -sf /Applications dmg_temp/Applications
+          hdiutil create -volname "HarmonyOS Device Tool" -srcfolder dmg_temp -ov -format UDZO HarmonyOS-Device-Tool-macOS.dmg
+          rm -rf dmg_temp
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-dmg
+          path: HarmonyOS-Device-Tool-macOS.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install customtkinter pyinstaller
+
+      - name: Create Windows spec file
+        run: |
+          python -c "
+          import os
+          spec_content = '''
+          # -*- mode: python ; coding: utf-8 -*-
+          import os
+          PROJECT_ROOT = os.path.dirname(os.path.abspath(SPEC))
+
+          # Windows hdc binaries (内置)
+          hdc_windows_dir = os.path.join(PROJECT_ROOT, 'hdc', 'windows')
+          hdc_binaries = []
+          if os.path.exists(os.path.join(hdc_windows_dir, 'hdc.exe')):
+              hdc_binaries.append((os.path.join(hdc_windows_dir, 'hdc.exe'), 'hdc'))
+              if os.path.exists(os.path.join(hdc_windows_dir, 'libusb_shared.dll')):
+                  hdc_binaries.append((os.path.join(hdc_windows_dir, 'libusb_shared.dll'), '.'))
+
+          a = Analysis(
+              ['hap_installer.py'],
+              pathex=[PROJECT_ROOT],
+              binaries=hdc_binaries,
+              datas=[],
+              hiddenimports=[
+                  'tkinter',
+                  'customtkinter',
+                  'customtkinter.windows',
+                  'customtkinter.windows.widgets',
+                  'darkdetect',
+                  'packaging',
+              ],
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['matplotlib', 'numpy', 'pandas', 'IPython', 'jupyter'],
+              cipher=None,
+              noarchive=False,
+          )
+
+          pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+
+          exe = EXE(
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
+              [],
+              name='HarmonyOS Device Tool',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=True,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None,
+          )
+          '''
+          with open('pyinstaller_windows.spec', 'w') as f:
+              f.write(spec_content)
+          "
+
+      - name: Build .exe
+        run: |
+          pyinstaller pyinstaller_windows.spec --clean --noconfirm
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-exe
+          path: dist/HarmonyOS Device Tool.exe
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS dmg
+        uses: actions/download-artifact@v4
+        with:
+          name: macOS-dmg
+
+      - name: Download Windows exe
+        uses: actions/download-artifact@v4
+        with:
+          name: Windows-exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            HarmonyOS-Device-Tool-macOS.dmg
+            HarmonyOS Device Tool.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

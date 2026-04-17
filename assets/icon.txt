@@ -1,0 +1,4 @@
+请添加应用图标:
+1. 创建 512x512 PNG 图标
+2. 使用 sips 转换为 icns:
+   sips -s format icns icon.png --out icon.icns
